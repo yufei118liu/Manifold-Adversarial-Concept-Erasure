@@ -115,9 +115,20 @@ class NormalizingFlow():
             z = trans.foward(params[i])
         return z
 
+    def sum_logdet(self):
+        return sum([trans.logdet for trans in self.flow])
+
 class VAE(nn.Module):
-    def __init__(self, transformation, latent_size, flow_length):
+    def __init__(self, input_dim, layer_size, transformation, latent_size, flow_length):
         super().__init__()
+        self.input_dim = input_dim
+        self.layer_size = layer_size
+        self.transformation = transformation
+        self.latent_size = latent_size
+        self.flow_length = flow_length
+
+    
+
 
 
     
