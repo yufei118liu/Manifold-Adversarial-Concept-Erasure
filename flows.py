@@ -4,6 +4,7 @@
 import numpy as np
 import torch 
 from torch import nn
+from torch.nn import functional as F
 
 
 class Transformation:
@@ -109,6 +110,7 @@ class NormalizingFlow():
         self.D = D
         self.K = K 
         self.flow = [transformation(self.D) for _ in range(K)]
+        self.num_params = self.flow[0].num_params()
     
     def forward(self, params):
         for i, trans in enumerate(self.flow):
@@ -121,22 +123,51 @@ class NormalizingFlow():
 class VAE(nn.Module):
     def __init__(self, input_dim, layer_size, transformation, latent_size, flow_length):
         super().__init__()
-        self.input_dim = input_dim
-        self.layer_size = layer_size
-        self.transformation = transformation
-        self.latent_size = latent_size
-        self.flow_length = flow_length
 
-    
+        #encoder
+        self.fc1 = nn.Linear(input_dim, 400)
+        # encode mean
+        self.fc21_mean = nn.Linear(400, layer_size)
+        # encode variance
+        self.fc22_var = nn.Linear(400, layer_size)
 
+        #decoder
+        self.fc3 = nn.Linear(layer_size, 400)
+        self.fc4 = nn.Linear(400, input_dim)
 
+        # normalizing flow
+        self.flow = NormalizingFlow(transformation, latent_size, flow_length)
 
-    
+        # encode flow parameters ( parallel to mean and var )
+        self.fc23_flow = nn.Linear(400, self.flow.nParams * flow_length)
 
+    def encode(self, x):
+        h = F.relu(self.fc1(x))
+        # returns mean, logvar and flow params
+        return (self.fc21_mean(h), self.fc22_var(h),
+                self.fc23_flow(h).mean(dim=0).chunk(self.flow.K, dim=0))
 
-    
+    #generate latent variable z = mu + std * eps
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5*logvar)
+        eps = torch.randn_like()
+        return torch.add(mu, eps, alpha=std)
 
+    def decode(self, z):
+        h = F.relu(self.fc3(z))
+        return torch.sigmoid(self.fc4(h))
 
+    def forward(self, x):
+        """Forward pass
+        Transforms the input into latent variables and reconstructs the input
 
+        Args
+        x  -- input tensor
 
+        Returns recontructed input along with mean and variance of the latent variables
+        """
+        mu, logvar, params = self.encode(x.view(-1, self.input_dim))
+        z = self.reparameterize(mu, logvar)
+        z = self.flow.forward(z, params)
+        return self.decode(z), mu, logvar
 
