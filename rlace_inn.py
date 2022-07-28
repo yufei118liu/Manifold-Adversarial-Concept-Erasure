@@ -22,6 +22,16 @@ def symmetric(X):
     X.data = 0.5 * (X.data + X.data.T)
     return X
 
+def apply_inn(inn, X, P):
+    output = inn.forward(X)[0]
+    print(type(output))
+    output = output @P
+    print(type(output))
+    output = inn.forward(output, rev=True)[0] 
+    print(output.shape)
+    print("————————")
+    return output  
+
 def get_score(X_train, y_train, X_dev, y_dev, P, rank):
     P_svd = get_projection(P, rank)
     
@@ -47,11 +57,11 @@ def get_score_inn(X_train, y_train, X_dev, y_dev, P, rank, inn):
     
     for i in range(NUM_CLFS_IN_EVAL):
         clf = init_classifier()
-        clf.fit(inn.forward(inn.forward(X_train) @ P_svd, rev=True), y_train)
-        y_pred = clf.predict_proba(inn.forward(inn.forward(X_dev) @ P_svd))
+        clf.fit(apply_inn(inn, X_train, P_svd), y_train)
+        y_pred = clf.predict_proba(apply_inn(inn, X_dev,P_svd))
         loss = sklearn.metrics.log_loss(y_dev, y_pred)
         loss_vals.append(loss)
-        accs.append(clf.score(inn.forward(inn.forward(X_dev) @ P_svd, y_dev)))
+        accs.append(clf.score(apply_inn(inn, X, P_svd), y_dev))
         
     i = np.argmin(loss_vals)
     return loss_vals[i], accs[i]
@@ -149,7 +159,7 @@ optimizer_params_P={"lr": 0.005, "weight_decay": 1e-4}, optimizer_params_predict
 
     def get_loss_fn_inn(X, y, predictor, P, inn, bce_loss_fn, optimize_P=False):
         I = torch.eye(X_train.shape[1]).to(device)
-        bce = bce_loss_fn(predictor(inn.forward(inn.forward(X) @ (I - P), rev=True)).squeeze(), y)
+        bce = bce_loss_fn(predictor(apply_inn(inn, X, I-P)).squeeze(), y)
         if optimize_P:
             bce = -bce
         return bce
@@ -203,21 +213,20 @@ optimizer_params_P={"lr": 0.005, "weight_decay": 1e-4}, optimizer_params_predict
             idx = np.arange(0, X_torch.shape[0])
             np.random.shuffle(idx)
             X_batch, y_batch = X_torch[idx[:batch_size]], y_torch[idx[:batch_size]]
+            P = symmetric(P)
 
             #train the INN using reconstruction loss
             optimizer_INN.zero_grad()
-            X_sim = inn.forward(X_batch)
-            print("X_sim", X_sim)
-            print(inn.forward(X_sim, rev=True))
-            recons_loss = torch.nn.MSELoss(X_batch, inn.forward(inn.forward(X_batch)[0], rev=True)[0])
-            recons_loss.backward()
+            recons_loss = torch.nn.MSELoss()
+            loss_INN = recons_loss(X_batch, apply_inn(inn, X_batch, P))
+            loss_INN.backward()
             optimizer_INN.step()
 
-            P = symmetric(P)
+            
             optimizer_P.zero_grad()
 
 
-            loss_P = get_loss_fn_inn(X_batch, y_batch, predictor, symmetric(P), bce_loss_fn, optimize_P=True)
+            loss_P = get_loss_fn_inn(X_batch, y_batch, predictor, symmetric(P), inn, bce_loss_fn, optimize_P=True)
             loss_P.backward()
             optimizer_P.step()
 
@@ -237,7 +246,7 @@ optimizer_params_P={"lr": 0.005, "weight_decay": 1e-4}, optimizer_params_predict
             np.random.shuffle(idx)
             X_batch, y_batch = X_torch[idx[:batch_size]], y_torch[idx[:batch_size]]
 
-            loss_predictor = get_loss_fn_inn(X_batch, y_batch, predictor, symmetric(P), bce_loss_fn, optimize_P=False)
+            loss_predictor = get_loss_fn_inn(X_batch, y_batch, predictor, symmetric(P), inn, bce_loss_fn, optimize_P=False)
             loss_predictor.backward()
             optimizer_predictor.step()
             count_examples += batch_size
