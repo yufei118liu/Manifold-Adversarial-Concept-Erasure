@@ -22,15 +22,15 @@ def symmetric(X):
     X.data = 0.5 * (X.data + X.data.T)
     return X
 
-def apply_inn(inn, X, P):
+def apply_inn(inn, X, P, output_type="tensor"):
     output = inn.forward(X)[0]
-    print(type(output))
-    output = output @P
-    print(type(output))
+    #print(type(output), type(P))
+    output = output @ P
+    #print(type(output))
     output = inn.forward(output, rev=True)[0] 
-    print(output.shape)
-    print("————————")
-    return output  
+    #print(output.shape)
+    #print("————————")
+    return output if output_type == "tensor" else output.detach().numpy()
 
 def get_score(X_train, y_train, X_dev, y_dev, P, rank):
     P_svd = get_projection(P, rank)
@@ -51,17 +51,20 @@ def get_score(X_train, y_train, X_dev, y_dev, P, rank):
 
 def get_score_inn(X_train, y_train, X_dev, y_dev, P, rank, inn):
     P_svd = get_projection(P, rank)
+    P_svd = torch.as_tensor(P_svd, dtype=torch.float)
+    X_train = torch.as_tensor(X_train, dtype=torch.float)
+    X_dev = torch.as_tensor(X_dev, dtype=torch.float)
     
     loss_vals = []
     accs = []
     
     for i in range(NUM_CLFS_IN_EVAL):
         clf = init_classifier()
-        clf.fit(apply_inn(inn, X_train, P_svd), y_train)
-        y_pred = clf.predict_proba(apply_inn(inn, X_dev,P_svd))
+        clf.fit(apply_inn(inn, X_train, P_svd, output_type="numpy"), y_train)
+        y_pred = clf.predict_proba(apply_inn(inn, X_dev,P_svd, output_type="numpy"))
         loss = sklearn.metrics.log_loss(y_dev, y_pred)
         loss_vals.append(loss)
-        accs.append(clf.score(apply_inn(inn, X, P_svd), y_dev))
+        accs.append(clf.score(apply_inn(inn, X_dev,P_svd, output_type="numpy"), y_dev))
         
     i = np.argmin(loss_vals)
     return loss_vals[i], accs[i]
