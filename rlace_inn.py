@@ -273,7 +273,7 @@ optimizer_params_P={"lr": 0.005, "weight_decay": 1e-4}, optimizer_params_predict
         if i > 1 and np.abs(best_score - maj) < epsilon:
         #if i > 1 and np.abs(best_loss - label_entropy) < epsilon:
                     break
-    output = prepare_output(best_P,rank,best_inn,best_score)
+    output = prepare_output_inn(best_P,rank,best_inn,best_score)
     return output
 
 if __name__ == "__main__":
