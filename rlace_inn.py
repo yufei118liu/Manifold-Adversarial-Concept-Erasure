@@ -2,6 +2,7 @@ import numpy as np
 import tqdm
 import torch
 from sklearn.linear_model import SGDClassifier
+from sklearn.neural_network import MLPClassifier
 import time
 from torch.optim import SGD, Adam
 import random
@@ -11,13 +12,17 @@ import FrEIA.framework as Ff
 import FrEIA.modules as Fm
 
 EVAL_CLF_PARAMS = {"loss": "log", "tol": 1e-4, "iters_no_change": 15, "alpha": 1e-4, "max_iter": 25000}
+EVAL_CLF_PARAMS_INN = {"hidden_layer_sizes": (100, ), "activation":"relu", "learning_rate_init": 0.0003, "alpha": 1e-4, "max_iter": 25000,"tol": 1e-4}
 NUM_CLFS_IN_EVAL = 3 # change to 1 for large dataset / high dimensionality
 
 def init_classifier():
 
     return SGDClassifier(loss=EVAL_CLF_PARAMS["loss"], fit_intercept=True, max_iter=EVAL_CLF_PARAMS["max_iter"], tol=EVAL_CLF_PARAMS["tol"], n_iter_no_change=EVAL_CLF_PARAMS["iters_no_change"],
                         n_jobs=32, alpha=EVAL_CLF_PARAMS["alpha"])
-                        
+
+def init_classifier_inn():
+    return MLPClassifier(hidden_layer_sizes=EVAL_CLF_PARAMS_INN["hidden_layer_sizes"], activation=EVAL_CLF_PARAMS_INN["activation"], learning_rate_init=EVAL_CLF_PARAMS_INN["learning_rate_init"], max_iter=EVAL_CLF_PARAMS_INN["max_iter"], alpha=EVAL_CLF_PARAMS_INN["alpha"], tol=EVAL_CLF_PARAMS_INN["tol"])
+
 def symmetric(X):
     X.data = 0.5 * (X.data + X.data.T)
     return X
@@ -317,17 +322,18 @@ if __name__ == "__main__":
     # train a classifier
     
     P_svd = output["P"]
+    inn = output["INN"]
     P_before_svd = output["P_before_svd"]
-    svm = init_classifier()
+    svm = init_classifier_inn()
                         
     svm.fit(X_train[:] , y_train[:])
     score_original = svm.score(X_dev, y_dev)
     
-    svm = init_classifier()
+    svm = init_classifier_inn()
     svm.fit(X_train[:] @ P_before_svd , y_train[:])
     score_projected_no_svd = svm.score(X_dev @ P_before_svd, y_dev)
     
-    svm = init_classifier()
+    svm = init_classifier_inn()
     svm.fit(X_train[:] @ P_svd , y_train[:])
     score_projected_svd_dev = svm.score(X_dev @ P_svd, y_dev)
     score_projected_svd_train = svm.score(X_train @ P_svd, y_train)
