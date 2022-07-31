@@ -27,7 +27,10 @@ def symmetric(X):
     X.data = 0.5 * (X.data + X.data.T)
     return X
 
-def apply_inn(inn, X, P, output_type="tensor"):
+def apply_inn(inn, X, P, type="tensor"):
+    if type != "tensor":
+        X = torch.as_tensor(X, dtype=torch.float)
+        P = torch.as_tensor(P, dtype=torch.float)
     output = inn.forward(X)[0]
     #print(type(output), type(P))
     output = output @ P
@@ -35,7 +38,7 @@ def apply_inn(inn, X, P, output_type="tensor"):
     output = inn.forward(output, rev=True)[0] 
     #print(output.shape)
     #print("————————")
-    return output if output_type == "tensor" else output.detach().numpy()
+    return output if type == "tensor" else output.detach().numpy()
 
 def get_score(X_train, y_train, X_dev, y_dev, P, rank):
     P_svd = get_projection(P, rank)
@@ -56,20 +59,17 @@ def get_score(X_train, y_train, X_dev, y_dev, P, rank):
 
 def get_score_inn(X_train, y_train, X_dev, y_dev, P, rank, inn):
     P_svd = get_projection(P, rank)
-    P_svd = torch.as_tensor(P_svd, dtype=torch.float)
-    X_train = torch.as_tensor(X_train, dtype=torch.float)
-    X_dev = torch.as_tensor(X_dev, dtype=torch.float)
     
     loss_vals = []
     accs = []
     
     for i in range(NUM_CLFS_IN_EVAL):
         clf = init_classifier()
-        clf.fit(apply_inn(inn, X_train, P_svd, output_type="numpy"), y_train)
-        y_pred = clf.predict_proba(apply_inn(inn, X_dev,P_svd, output_type="numpy"))
+        clf.fit(apply_inn(inn, X_train, P_svd, type="numpy"), y_train)
+        y_pred = clf.predict_proba(apply_inn(inn, X_dev,P_svd, type="numpy"))
         loss = sklearn.metrics.log_loss(y_dev, y_pred)
         loss_vals.append(loss)
-        accs.append(clf.score(apply_inn(inn, X_dev,P_svd, output_type="numpy"), y_dev))
+        accs.append(clf.score(apply_inn(inn, X_dev,P_svd, type="numpy"), y_dev))
         
     i = np.argmin(loss_vals)
     return loss_vals[i], accs[i]
@@ -122,6 +122,7 @@ def get_entropy(y):
     
 
 def get_projection(P, rank):
+    #Singular value decomposition for dimensionality reduction
     D,U = np.linalg.eigh(P)
     U = U.T
     W = U[-rank:]
@@ -307,12 +308,12 @@ if __name__ == "__main__":
     X_dev, y_dev = X[l_train:], y[l_train:]
 
     # arguments
-    num_iters = 50000
+    num_iters = 30000
     rank=1
     optimizer_class = torch.optim.SGD
-    optimizer_params_INN = {"lr": 0.003, "weight_decay": 1e-4}
-    optimizer_params_P = {"lr": 0.003, "weight_decay": 1e-4}
-    optimizer_params_predictor = {"lr": 0.003,"weight_decay": 1e-4}
+    optimizer_params_INN = {"lr": 0.005, "weight_decay": 1e-4}
+    optimizer_params_P = {"lr": 0.005, "weight_decay": 1e-4}
+    optimizer_params_predictor = {"lr": 0.005,"weight_decay": 1e-4}
     epsilon = 0.001 # stop 0.1% from majority acc
     batch_size = 256
 
@@ -330,13 +331,13 @@ if __name__ == "__main__":
     score_original = svm.score(X_dev, y_dev)
     
     svm = init_classifier_inn()
-    svm.fit(X_train[:] @ P_before_svd , y_train[:])
-    score_projected_no_svd = svm.score(X_dev @ P_before_svd, y_dev)
+    svm.fit(apply_inn(inn, X_train[:], P_before_svd, type="numpy") , y_train[:])
+    score_projected_no_svd = svm.score(apply_inn(inn, X_dev, P_before_svd, type="numpy"), y_dev)
     
     svm = init_classifier_inn()
-    svm.fit(X_train[:] @ P_svd , y_train[:])
-    score_projected_svd_dev = svm.score(X_dev @ P_svd, y_dev)
-    score_projected_svd_train = svm.score(X_train @ P_svd, y_train)
+    svm.fit(apply_inn(inn, X_train[:], P_svd, type="numpy") , y_train[:])
+    score_projected_svd_dev = svm.score(apply_inn(inn, X_dev, P_svd, type="numpy"), y_dev)
+    score_projected_svd_train = svm.score(apply_inn(inn, X_train, P_svd, type="numpy"), y_train)
     maj_acc_dev = get_majority_acc(y_dev)
     maj_acc_train = get_majority_acc(y_train)
     
