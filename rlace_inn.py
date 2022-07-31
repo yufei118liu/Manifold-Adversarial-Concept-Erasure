@@ -308,12 +308,12 @@ if __name__ == "__main__":
     X_dev, y_dev = X[l_train:], y[l_train:]
 
     # arguments
-    num_iters = 30000
+    num_iters = 50000
     rank=1
     optimizer_class = torch.optim.SGD
-    optimizer_params_INN = {"lr": 0.005, "weight_decay": 1e-4}
-    optimizer_params_P = {"lr": 0.005, "weight_decay": 1e-4}
-    optimizer_params_predictor = {"lr": 0.005,"weight_decay": 1e-4}
+    optimizer_params_INN = {"lr": 0.003, "weight_decay": 1e-4}
+    optimizer_params_P = {"lr": 0.003, "weight_decay": 1e-4}
+    optimizer_params_predictor = {"lr": 0.003,"weight_decay": 1e-4}
     epsilon = 0.001 # stop 0.1% from majority acc
     batch_size = 256
 
